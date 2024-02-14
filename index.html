@@ -4,18 +4,22 @@
 <head>
     <title>Text to Speech</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/readability/0.5.0/Readability.js"
-        integrity="sha512-XuON3CVV9jCUlH12mEsTey3DHbA9XndvpvfasjidcezUJ7zH4ImMHKRx03jZl7ZhPUwVzN0Pt1pQiAeWAsAyMw=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>
+        .dark-theme {
+            background-color: #121212;
+            color: #ffffff;
+        }
+    </style>
+
 </head>
 
 <body>
     <div class="container">
         <h1 class="mt-4 mb-4">Text to Speech</h1>
         <div class="form-group">
-            <label for="text">Enter text:</label>
-            <textarea id="text" class="form-control" rows="3">
-            </textarea>
+            <label for="text">Enter text or :</label>
+            <textarea id="text" class="form-control"
+                rows="3">https://opensource.com/resources/what-open-source</textarea>
         </div>
         <div class="form-group">
             <label for="voiceSelect">Select voice:</label>
@@ -25,17 +29,26 @@
         <button onclick="stopSpeech()" class="btn btn-danger">Stop</button>
         <button onclick="nextSentence()" class="btn btn-success">Next Sentence</button>
         <button onclick="prevSentence()" class="btn btn-warning">Previous Sentence</button>
+        <button id="themeButton" class="btn btn-secondary">Toggle Dark Theme</button>
+
 
         <div id="sentenceContainer"
             style="display: flex;justify-content: center;height: 100vh;flex-wrap: wrap;align-content: center;">
-            <div id="prevSentence" class="text-center" style="font-size: 40px; opacity: 0.2;"></div>
+            <div id="prevSentence" class="text-center d-none" style="font-size: 40px; opacity: 0.2;"></div>
             <div id="currentSentence" class="text-center" style="font-size: 50px; margin: 10px 0;"></div>
-            <div id="nextSentence" class="text-center" style="font-size: 40px; opacity: 0.2;"></div>
+            <div id="nextSentence" class="text-center d-none" style="font-size: 40px; opacity: 0.2;"></div>
         </div>
 
     </div>
 
     <script>
+
+        if ('speechSynthesis' in window) {
+            // Code that uses speechSynthesis
+        } else {
+            console.error('Speech synthesis not supported');
+        }
+
         // Constants
         const DEFAULT_RATE = 1;
         const DEFAULT_VOLUME = 1;
@@ -54,20 +67,28 @@
         const nextSentenceElement = document.getElementById('nextSentence');
         const prevSentenceElement = document.getElementById('prevSentence');
 
-        // Functions
-        const splitIntoSentences = text => text.split('\n').filter(line => line.trim() !== '');
-
+        // Split the article into sentences 
+        const splitIntoSentences = text => text.match(/[^.!?]+[.!?]+["']*/g).map(sentence => sentence.trim());
         const fetchTextFromUrl = async (url) => {
-            const response = await fetch(url);
-            const html = await response.text();
-            const dom = new DOMParser().parseFromString(html, 'text/html');
-            const reader = new Readability(dom);
-            const article = reader.parse();
-            return article.textContent;
+            try {
+                const response = await fetch(url);
+                const html = await response.text();
+                const dom = new DOMParser().parseFromString(html, 'text/html');
+                const reader = new Readability(dom);
+                const article = reader.parse();
+                return article.textContent;
+            } catch (error) {
+                console.error('Error fetching text from URL:', error);
+                return '';
+            }
         }
 
         const populateVoiceList = () => {
             voiceList = speechSynthesis.getVoices().filter(n => n.lang.startsWith("en-"));
+            if (voiceList.length === 0) {
+                console.error('No English voices available');
+                return;
+            }
             voiceSelectElement.innerHTML = voiceList.map((voice, i) => `<option ${voice.name === DEFAULT_VOICE ? 'selected' : ''}>${voice.name}</option>`).join('');
         }
 
@@ -75,10 +96,34 @@
             speechSynthesis.cancel();
 
             const selectedVoice = voiceList.find(voice => voice.name === voiceSelectElement.value);
+            if (!selectedVoice) {
+                console.error('Selected voice not found');
+                return;
+            }
+
+
             const utterance = new SpeechSynthesisUtterance(sentences[currentSentence]);
             utterance.voice = selectedVoice;
 
-            utterance.onend = nextSentence;
+            utterance.onstart = function () {
+                console.timeEnd('delay');
+            };
+
+            utterance.onend = function () {
+                console.time('delay');
+                nextSentence();
+            };
+
+            utterance.onboundary = function (event) {
+                if (event.name === 'word') {
+                    // Highlight the current word
+                    const text = sentences[currentSentence];
+                    const wordStart = event.charIndex;
+                    const wordEnd = wordStart + event.charLength;
+                    const highlightedText = text.slice(0, wordStart) + '<mark class="p-0">' + text.slice(wordStart, wordEnd) + '</mark>' + text.slice(wordEnd);
+                    currentSentenceElement.innerHTML = highlightedText;
+                }
+            };
 
             currentSentenceElement.innerText = sentences[currentSentence];
             nextSentenceElement.innerText = sentences[currentSentence + 1] || '';
@@ -88,6 +133,7 @@
 
             localStorage.setItem('currentSentence', currentSentence);
         }
+
 
         const stopSpeech = () => speechSynthesis.cancel();
 
@@ -108,6 +154,7 @@
         // Event Listeners
         speechSynthesis.onvoiceschanged = populateVoiceList;
 
+        // Event Listener
         textElement.addEventListener('change', async function () {
             let text = this.value;
             if (text.startsWith('http://') || text.startsWith('https://')) {
@@ -118,10 +165,23 @@
             localStorage.setItem('currentText', text);
         });
 
+        // Trigger the 'change' event during initialization
+        let event = new Event('change');
+        textElement.dispatchEvent(event);
+
         voiceSelectElement.addEventListener('change', function () {
             localStorage.setItem('lastVoice', this.selectedIndex);
         });
+
+        document.getElementById('themeButton').addEventListener('click', function () {
+            document.body.classList.toggle('dark-theme');
+        });
+
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/readability/0.5.0/Readability.js"
+        integrity="sha512-XuON3CVV9jCUlH12mEsTey3DHbA9XndvpvfasjidcezUJ7zH4ImMHKRx03jZl7ZhPUwVzN0Pt1pQiAeWAsAyMw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
 </body>
 
 </html>
