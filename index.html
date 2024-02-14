@@ -46,7 +46,7 @@
         let voiceList = [];
         let sentences = [];
         let currentSentence = 0;
-        let selectedVoice; // Move selectedVoice to the state
+        let worker;
 
         // DOM Elements
         const textElement = document.getElementById('text');
@@ -70,35 +70,20 @@
         const populateVoiceList = () => {
             voiceList = speechSynthesis.getVoices().filter(n => n.lang.startsWith("en-"));
             voiceSelectElement.innerHTML = voiceList.map((voice, i) => `<option ${voice.name === DEFAULT_VOICE ? 'selected' : ''}>${voice.name}</option>`).join('');
-            selectedVoice = voiceList.find(voice => voice.name === voiceSelectElement.value); // Initialize selectedVoice here
         }
 
-        const msg = new SpeechSynthesisUtterance();
-
         const speak = () => {
-
-
-            speechSynthesis.cancel();
-
-            msg.text = sentences[currentSentence];
-            msg.voice = selectedVoice;
-            msg.lang = selectedVoice.lang;
-            msg.rate = DEFAULT_RATE;
-            msg.volume = DEFAULT_VOLUME;
-            msg.pitch = DEFAULT_PITCH;
-
-            msg.onend = nextSentence;
+            const selectedVoice = voiceList.find(voice => voice.name === voiceSelectElement.value);
+            worker.postMessage({ text: sentences[currentSentence], voiceURI: selectedVoice.voiceURI });
 
             currentSentenceElement.innerText = sentences[currentSentence];
             nextSentenceElement.innerText = sentences[currentSentence + 1] || '';
             prevSentenceElement.innerText = sentences[currentSentence - 1] || '';
 
-            speechSynthesis.speak(msg);
-
             localStorage.setItem('currentSentence', currentSentence);
         }
 
-        const stopSpeech = () => speechSynthesis.cancel();
+        const stopSpeech = () => worker.terminate();
 
         const nextSentence = () => {
             if (currentSentence < sentences.length - 1) {
@@ -128,9 +113,11 @@
         });
 
         voiceSelectElement.addEventListener('change', function () {
-            selectedVoice = voiceList.find(voice => voice.name === voiceSelectElement.value); // Update selectedVoice here
             localStorage.setItem('lastVoice', this.selectedIndex);
         });
+
+        // Initialize the worker
+        worker = new Worker('worker.js');
     </script>
 </body>
 
