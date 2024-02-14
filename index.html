@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Text to Speech</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/readability/0.5.0/Readability.js"
+        integrity="sha512-XuON3CVV9jCUlH12mEsTey3DHbA9XndvpvfasjidcezUJ7zH4ImMHKRx03jZl7ZhPUwVzN0Pt1pQiAeWAsAyMw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+
+<body>
+    <div class="container">
+        <h1 class="mt-4 mb-4">Text to Speech</h1>
+        <div class="form-group">
+            <label for="text">Enter text:</label>
+            <textarea id="text" class="form-control" rows="3">
+            </textarea>
+        </div>
+        <div class="form-group">
+            <label for="voiceSelect">Select voice:</label>
+            <select id="voiceSelect" class="form-control"></select>
+        </div>
+        <button onclick="speak()" class="btn btn-primary">Speak</button>
+        <button onclick="stopSpeech()" class="btn btn-danger">Stop</button>
+        <button onclick="nextSentence()" class="btn btn-success">Next Sentence</button>
+        <button onclick="prevSentence()" class="btn btn-warning">Previous Sentence</button>
+
+        <div id="sentenceContainer"
+            style="display: flex;justify-content: center;height: 100vh;flex-wrap: wrap;align-content: center;">
+            <div id="prevSentence" class="text-center" style="font-size: 40px; opacity: 0.2;"></div>
+            <div id="currentSentence" class="text-center" style="font-size: 50px; margin: 10px 0;"></div>
+            <div id="nextSentence" class="text-center" style="font-size: 40px; opacity: 0.2;"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // Constants
+        const DEFAULT_RATE = 1;
+        const DEFAULT_VOLUME = 1;
+        const DEFAULT_PITCH = 1;
+        const DEFAULT_VOICE = "Microsoft Ava Online (Natural) - English (United States)";
+
+        // State
+        let voiceList = [];
+        let sentences = [];
+        let currentSentence = 0;
+        let selectedVoice; // Move selectedVoice to the state
+
+        // DOM Elements
+        const textElement = document.getElementById('text');
+        const voiceSelectElement = document.getElementById('voiceSelect');
+        const currentSentenceElement = document.getElementById('currentSentence');
+        const nextSentenceElement = document.getElementById('nextSentence');
+        const prevSentenceElement = document.getElementById('prevSentence');
+
+        // Functions
+        const splitIntoSentences = text => text.split('\n').filter(line => line.trim() !== '');
+
+        const fetchTextFromUrl = async (url) => {
+            const response = await fetch(url);
+            const html = await response.text();
+            const dom = new DOMParser().parseFromString(html, 'text/html');
+            const reader = new Readability(dom);
+            const article = reader.parse();
+            return article.textContent;
+        }
+
+        const populateVoiceList = () => {
+            voiceList = speechSynthesis.getVoices().filter(n => n.lang.startsWith("en-"));
+            voiceSelectElement.innerHTML = voiceList.map((voice, i) => `<option ${voice.name === DEFAULT_VOICE ? 'selected' : ''}>${voice.name}</option>`).join('');
+            selectedVoice = voiceList.find(voice => voice.name === voiceSelectElement.value); // Initialize selectedVoice here
+        }
+
+        const msg = new SpeechSynthesisUtterance();
+
+        const speak = () => {
+
+
+            speechSynthesis.cancel();
+
+            msg.text = sentences[currentSentence];
+            msg.voice = selectedVoice;
+            msg.lang = selectedVoice.lang;
+            msg.rate = DEFAULT_RATE;
+            msg.volume = DEFAULT_VOLUME;
+            msg.pitch = DEFAULT_PITCH;
+
+            msg.onend = nextSentence;
+
+            currentSentenceElement.innerText = sentences[currentSentence];
+            nextSentenceElement.innerText = sentences[currentSentence + 1] || '';
+            prevSentenceElement.innerText = sentences[currentSentence - 1] || '';
+
+            speechSynthesis.speak(msg);
+
+            localStorage.setItem('currentSentence', currentSentence);
+        }
+
+        const stopSpeech = () => speechSynthesis.cancel();
+
+        const nextSentence = () => {
+            if (currentSentence < sentences.length - 1) {
+                currentSentence++;
+                speak();
+            }
+        }
+
+        const prevSentence = () => {
+            if (currentSentence > 0) {
+                currentSentence--;
+                speak();
+            }
+        }
+
+        // Event Listeners
+        speechSynthesis.onvoiceschanged = populateVoiceList;
+
+        textElement.addEventListener('change', async function () {
+            let text = this.value;
+            if (text.startsWith('http://') || text.startsWith('https://')) {
+                // Use your proxy if the text is a URL
+                text = await fetchTextFromUrl(`https://corss-bypass.onrender.com/${encodeURIComponent(text)}`);
+            }
+            sentences = splitIntoSentences(text);
+            localStorage.setItem('currentText', text);
+        });
+
+        voiceSelectElement.addEventListener('change', function () {
+            selectedVoice = voiceList.find(voice => voice.name === voiceSelectElement.value); // Update selectedVoice here
+            localStorage.setItem('lastVoice', this.selectedIndex);
+        });
+    </script>
+</body>
+
+</html>
