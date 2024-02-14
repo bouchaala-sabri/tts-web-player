@@ -46,7 +46,6 @@
         let voiceList = [];
         let sentences = [];
         let currentSentence = 0;
-        let worker;
 
         // DOM Elements
         const textElement = document.getElementById('text');
@@ -73,17 +72,24 @@
         }
 
         const speak = () => {
+            speechSynthesis.cancel();
+
             const selectedVoice = voiceList.find(voice => voice.name === voiceSelectElement.value);
-            worker.postMessage({ text: sentences[currentSentence], voiceURI: selectedVoice.voiceURI });
+            const utterance = new SpeechSynthesisUtterance(sentences[currentSentence]);
+            utterance.voice = selectedVoice;
+
+            utterance.onend = nextSentence;
 
             currentSentenceElement.innerText = sentences[currentSentence];
             nextSentenceElement.innerText = sentences[currentSentence + 1] || '';
             prevSentenceElement.innerText = sentences[currentSentence - 1] || '';
 
+            speechSynthesis.speak(utterance);
+
             localStorage.setItem('currentSentence', currentSentence);
         }
 
-        const stopSpeech = () => worker.terminate();
+        const stopSpeech = () => speechSynthesis.cancel();
 
         const nextSentence = () => {
             if (currentSentence < sentences.length - 1) {
@@ -115,9 +121,6 @@
         voiceSelectElement.addEventListener('change', function () {
             localStorage.setItem('lastVoice', this.selectedIndex);
         });
-
-        // Initialize the worker
-        worker = new Worker('worker.js');
     </script>
 </body>
 
